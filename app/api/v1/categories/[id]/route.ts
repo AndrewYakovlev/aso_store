@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/shared/lib/db/prisma'
 import { z } from 'zod'
+import { generateUniqueSlugForCategory } from '@/shared/lib/utils/slug'
 
 // GET /api/v1/categories/[id] - Получить категорию по ID
 export async function GET(
@@ -115,6 +116,12 @@ export async function PATCH(
       )
     }
 
+    // Генерируем slug, если изменилось название и slug не передан
+    let slug = validatedData.slug
+    if (validatedData.name && validatedData.name !== existingCategory.name && !validatedData.slug) {
+      slug = await generateUniqueSlugForCategory(validatedData.name, id)
+    }
+
     // Проверка уникальности slug, если он изменяется
     if (validatedData.slug && validatedData.slug !== existingCategory.slug) {
       const categoryWithSlug = await prisma.category.findUnique({
@@ -168,7 +175,10 @@ export async function PATCH(
 
     const category = await prisma.category.update({
       where: { id },
-      data: validatedData,
+      data: {
+        ...validatedData,
+        ...(slug && { slug }),
+      },
       include: {
         parent: true,
         _count: {

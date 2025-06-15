@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/shared/lib/db/prisma'
 import { z } from 'zod'
+import { generateUniqueSlugForBrand } from '@/shared/lib/utils/slug'
 
 // GET /api/v1/brands - Получить список брендов
 export async function GET(request: NextRequest) {
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
 // Схема валидации для создания бренда
 const createBrandSchema = z.object({
   name: z.string().min(1, 'Название обязательно'),
-  slug: z.string().min(1, 'Slug обязателен').regex(/^[a-z0-9-]+$/, 'Slug может содержать только латиницу, цифры и дефис'),
+  slug: z.string().min(1, 'Slug обязателен').regex(/^[a-z0-9-]+$/, 'Slug может содержать только латиницу, цифры и дефис').optional(),
   logo: z.string().url().optional().nullable(),
   description: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
@@ -84,20 +85,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Проверка уникальности slug
-    const existingBrandBySlug = await prisma.brand.findUnique({
-      where: { slug: validatedData.slug },
-    })
+    // Генерируем slug, если он не передан
+    const slug = validatedData.slug || await generateUniqueSlugForBrand(validatedData.name)
 
-    if (existingBrandBySlug) {
-      return NextResponse.json(
-        { error: 'Бренд с таким slug уже существует' },
-        { status: 400 }
-      )
+    // Проверка уникальности slug, если он был передан вручную
+    if (validatedData.slug) {
+      const existingBrandBySlug = await prisma.brand.findUnique({
+        where: { slug: validatedData.slug },
+      })
+
+      if (existingBrandBySlug) {
+        return NextResponse.json(
+          { error: 'Бренд с таким slug уже существует' },
+          { status: 400 }
+        )
+      }
     }
 
     const brand = await prisma.brand.create({
-      data: validatedData,
+      data: {
+        ...validatedData,
+        slug,
+      },
     })
 
     return NextResponse.json({

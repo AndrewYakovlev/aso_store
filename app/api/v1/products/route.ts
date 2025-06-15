@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/shared/lib/db/prisma'
 import { z } from 'zod'
+import { generateUniqueSlugForProduct } from '@/shared/lib/utils/slug'
 
 // GET /api/v1/products - Получить список товаров с фильтрацией и пагинацией
 export async function GET(request: NextRequest) {
@@ -141,7 +142,7 @@ export async function GET(request: NextRequest) {
 // Схема валидации для создания товара
 const createProductSchema = z.object({
   name: z.string().min(1, 'Название обязательно'),
-  slug: z.string().min(1, 'Slug обязателен').regex(/^[a-z0-9-]+$/, 'Slug может содержать только латиницу, цифры и дефис'),
+  slug: z.string().min(1, 'Slug обязателен').regex(/^[a-z0-9-]+$/, 'Slug может содержать только латиницу, цифры и дефис').optional(),
   sku: z.string().min(1, 'Артикул обязателен'),
   description: z.string().optional().nullable(),
   shortDescription: z.string().optional().nullable(),
@@ -190,16 +191,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = createProductSchema.parse(body)
 
-    // Проверка уникальности slug
-    const existingProductBySlug = await prisma.product.findUnique({
-      where: { slug: validatedData.slug },
-    })
+    // Генерируем slug, если он не передан
+    const slug = validatedData.slug || await generateUniqueSlugForProduct(validatedData.name, validatedData.sku)
 
-    if (existingProductBySlug) {
-      return NextResponse.json(
-        { error: 'Товар с таким slug уже существует' },
-        { status: 400 }
-      )
+    // Проверка уникальности slug, если он был передан вручную
+    if (validatedData.slug) {
+      const existingProductBySlug = await prisma.product.findUnique({
+        where: { slug: validatedData.slug },
+      })
+
+      if (existingProductBySlug) {
+        return NextResponse.json(
+          { error: 'Товар с таким slug уже существует' },
+          { status: 400 }
+        )
+      }
     }
 
     // Проверка уникальности SKU
@@ -247,6 +253,7 @@ export async function POST(request: NextRequest) {
     const product = await prisma.product.create({
       data: {
         ...productData,
+        slug,
         images: {
           create: images,
         },

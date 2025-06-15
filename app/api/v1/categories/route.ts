@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/shared/lib/db/prisma'
 import { z } from 'zod'
+import { generateUniqueSlugForCategory } from '@/shared/lib/utils/slug'
 
 // GET /api/v1/categories - Получить список категорий
 export async function GET(request: NextRequest) {
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
 // Схема валидации для создания категории
 const createCategorySchema = z.object({
   name: z.string().min(1, 'Название обязательно'),
-  slug: z.string().min(1, 'Slug обязателен').regex(/^[a-z0-9-]+$/, 'Slug может содержать только латиницу, цифры и дефис'),
+  slug: z.string().min(1, 'Slug обязателен').regex(/^[a-z0-9-]+$/, 'Slug может содержать только латиницу, цифры и дефис').optional(),
   description: z.string().optional().nullable(),
   parentId: z.string().optional().nullable(),
   sortOrder: z.number().optional().default(0),
@@ -86,16 +87,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = createCategorySchema.parse(body)
 
-    // Проверка уникальности slug
-    const existingCategory = await prisma.category.findUnique({
-      where: { slug: validatedData.slug },
-    })
+    // Генерируем slug, если он не передан
+    const slug = validatedData.slug || await generateUniqueSlugForCategory(validatedData.name)
 
-    if (existingCategory) {
-      return NextResponse.json(
-        { error: 'Категория с таким slug уже существует' },
-        { status: 400 }
-      )
+    // Проверка уникальности slug, если он был передан вручную
+    if (validatedData.slug) {
+      const existingCategory = await prisma.category.findUnique({
+        where: { slug: validatedData.slug },
+      })
+
+      if (existingCategory) {
+        return NextResponse.json(
+          { error: 'Категория с таким slug уже существует' },
+          { status: 400 }
+        )
+      }
     }
 
     // Проверка существования родительской категории
@@ -113,7 +119,10 @@ export async function POST(request: NextRequest) {
     }
 
     const category = await prisma.category.create({
-      data: validatedData,
+      data: {
+        ...validatedData,
+        slug,
+      },
       include: {
         parent: true,
         _count: {

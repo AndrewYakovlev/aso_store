@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/shared/lib/db/prisma'
 import { z } from 'zod'
+import { generateUniqueSlugForProduct } from '@/shared/lib/utils/slug'
 
 // GET /api/v1/products/[id] - Получить товар по ID
 export async function GET(
@@ -176,6 +177,16 @@ export async function PATCH(
       )
     }
 
+    // Генерируем slug, если изменилось название или SKU и slug не передан
+    let slug = validatedData.slug
+    if ((validatedData.name || validatedData.sku) && !validatedData.slug) {
+      const name = validatedData.name || existingProduct.name
+      const sku = validatedData.sku || existingProduct.sku
+      if (name !== existingProduct.name || sku !== existingProduct.sku) {
+        slug = await generateUniqueSlugForProduct(name, sku, id)
+      }
+    }
+
     // Проверка уникальности slug, если он изменяется
     if (validatedData.slug && validatedData.slug !== existingProduct.slug) {
       const productWithSlug = await prisma.product.findUnique({
@@ -242,7 +253,10 @@ export async function PATCH(
       // Обновляем основные данные товара
       const updatedProduct = await tx.product.update({
         where: { id },
-        data: productData,
+        data: {
+          ...productData,
+          ...(slug && { slug }),
+        },
       })
 
       // Обновляем категории, если они переданы
