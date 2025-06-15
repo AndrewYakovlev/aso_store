@@ -1,0 +1,1030 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Пользователи
+model User {
+  id               String         @id @default(cuid())
+  phone            String         @unique
+  email            String?
+  firstName        String?
+  lastName         String?
+  role             UserRole       @default(CUSTOMER)
+  customerGroupId  String?
+  customerGroup    CustomerGroup? @relation(fields: [customerGroupId], references: [id])
+  personalDiscount Decimal?       @default(0) @db.Decimal(5, 2)
+  phoneVerified    Boolean        @default(false)
+  emailVerified    Boolean        @default(false)
+  lastLoginAt      DateTime?
+  lastActivityAt   DateTime       @default(now())
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  deletedAt        DateTime?
+
+  carts                Cart[]
+  orders               Order[]
+  chats                Chat[]
+  managedChats         Chat[]                @relation("ManagerChats")
+  favorites            Favorite[]
+  viewHistory          ViewHistory[]
+  personalPromoCodes   PromoCode[]
+  promoCodeUsage       PromoCodeUsage[]
+  orderStatusLogs      OrderStatusLog[]
+  PushSubscription     PushSubscription[]
+  NotificationSettings NotificationSettings?
+  NotificationLog      NotificationLog[]
+  otpCodes             OtpCode[]
+  productViews         ProductView[]
+  cartAbandonments     CartAbandonment[]
+  importJobs           ImportJob[]
+  auditLogs            AuditLog[]
+  anonymousSessions    AnonymousUser[]
+  searchHistory        SearchHistory[]
+
+  @@index([phone])
+  @@index([email])
+  @@index([role])
+}
+
+enum UserRole {
+  CUSTOMER
+  MANAGER
+  ADMIN
+}
+
+// Коды подтверждения
+model OtpCode {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  code      String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@index([userId, createdAt])
+}
+
+// Анонимные пользователи
+model AnonymousUser {
+  id           String   @id @default(cuid())
+  token        String   @unique // Уникальный токен для идентификации
+  sessionId    String   @unique
+  ipAddress    String?
+  userAgent    String?
+  userId       String? // Связь с реальным пользователем после авторизации
+  user         User?    @relation(fields: [userId], references: [id])
+  createdAt    DateTime @default(now())
+  lastActivity DateTime @default(now())
+
+  carts         Cart[]
+  chats         Chat[]
+  viewHistory   ViewHistory[]
+  favorites     Favorite[]
+  searchHistory SearchHistory[]
+
+  @@index([token])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+// Push подписки пользователей
+model PushSubscription {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint   String   @unique
+  p256dh     String // Public key
+  auth       String // Auth secret
+  userAgent  String?
+  deviceName String? // Для идентификации устройства
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lastUsedAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+// Настройки уведомлений пользователя
+model NotificationSettings {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Типы уведомлений
+  newChat            Boolean @default(true)
+  newMessage         Boolean @default(true)
+  chatAssigned       Boolean @default(true)
+  chatStatusChanged  Boolean @default(true)
+  orderStatusChanged Boolean @default(true)
+
+  // Расписание (для менеджеров)
+  enableSchedule   Boolean @default(false)
+  scheduleStart    String? // Время начала рабочего дня (HH:mm)
+  scheduleEnd      String? // Время окончания рабочего дня (HH:mm)
+  scheduleTimezone String  @default("Europe/Moscow")
+  scheduleDays     Json? // Массив дней недели [1,2,3,4,5]
+
+  // Общие настройки
+  soundEnabled     Boolean @default(true)
+  vibrationEnabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Журнал отправленных уведомлений
+model NotificationLog {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  type           String // new_chat, new_message, etc.
+  title          String
+  body           String
+  data           Json? // Дополнительные данные
+  subscriptionId String? // ID подписки через которую отправлено
+  status         String // sent, failed, clicked
+  errorMessage   String?
+  sentAt         DateTime  @default(now())
+  clickedAt      DateTime?
+
+  @@index([userId, sentAt])
+  @@index([type])
+}
+
+// Категории товаров
+model Category {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  description String?
+  parentId    String?
+  parent      Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryToCategory")
+  sortOrder   Int        @default(0)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  deletedAt   DateTime?
+
+  // SEO поля
+  metaTitle       String?
+  metaDescription String?
+  metaKeywords    String?
+  ogTitle         String?
+  ogDescription   String?
+  ogImage         String?
+  canonicalUrl    String?
+
+  products        ProductCategory[]
+  characteristics CharacteristicCategory[]
+  viewHistory     ViewHistory[]
+
+  @@index([slug])
+  @@index([isActive])
+}
+
+// Товары
+model Product {
+  id               String    @id @default(cuid())
+  name             String
+  slug             String    @unique
+  description      String?
+  shortDescription String?
+  sku              String    @unique
+  price            Decimal   @db.Decimal(10, 2)
+  comparePrice     Decimal?  @db.Decimal(10, 2)
+  stock            Int       @default(0)
+  deliveryDays     Int?
+  weight           Decimal?  @db.Decimal(10, 3) // в кг
+  dimensions       Json?     // {length, width, height} в см
+  minOrderQuantity Int?      @default(1)
+  brandId          String
+  brand            Brand     @relation(fields: [brandId], references: [id])
+  isOriginal       Boolean   @default(true)
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  // SEO поля
+  metaTitle       String?
+  metaDescription String?
+  metaKeywords    String?
+  ogTitle         String?
+  ogDescription   String?
+  ogImage         String?
+  canonicalUrl    String?
+
+  categories          ProductCategory[]
+  images              ProductImage[]
+  characteristics     ProductCharacteristic[]
+  vehicleApplications VehicleApplication[]
+  crossReferences     CrossReference[]        @relation("ProductCrossReference")
+  cartItems           CartItem[]
+  orderItems          OrderItem[]
+  favorites           Favorite[]
+  viewHistory         ViewHistory[]
+  tags                ProductTag[]
+  productViews        ProductView[]
+
+  @@index([slug])
+  @@index([sku])
+  @@index([brandId])
+  @@index([isActive])
+  @@index([price])
+}
+
+// Теги товаров
+model Tag {
+  id       String       @id @default(cuid())
+  name     String       @unique
+  slug     String       @unique
+  products ProductTag[]
+
+  @@index([slug])
+}
+
+// Связь товаров с тегами
+model ProductTag {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([productId, tagId])
+  @@index([tagId])
+}
+
+// Связь товаров с категориями
+model ProductCategory {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  isPrimary  Boolean  @default(false)
+
+  @@unique([productId, categoryId])
+  @@index([categoryId])
+}
+
+// Изображения товаров
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  url       String
+  alt       String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+// Бренды
+model Brand {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  logo        String?
+  description String?
+  country     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  products        Product[]
+  crossReferences CrossReference[]
+
+  @@index([slug])
+}
+
+// Характеристики товаров
+model Characteristic {
+  id           String   @id @default(cuid())
+  name         String
+  code         String   @unique
+  type         String // text, number, boolean, select
+  unit         String? // Единица измерения
+  isRequired   Boolean  @default(false)
+  isFilterable Boolean  @default(false)
+  filterType   String? // range, checkbox, select
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  values        CharacteristicValue[]
+  productValues ProductCharacteristic[]
+  categories    CharacteristicCategory[]
+
+  @@index([code])
+  @@index([isFilterable])
+}
+
+// Связь характеристик с категориями (many-to-many)
+model CharacteristicCategory {
+  id               String         @id @default(cuid())
+  characteristicId String
+  characteristic   Characteristic @relation(fields: [characteristicId], references: [id], onDelete: Cascade)
+  categoryId       String
+  category         Category       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([characteristicId, categoryId])
+  @@index([categoryId])
+}
+
+// Значения характеристик (для типа select)
+model CharacteristicValue {
+  id               String         @id @default(cuid())
+  characteristicId String
+  characteristic   Characteristic @relation(fields: [characteristicId], references: [id])
+  value            String
+  sortOrder        Int            @default(0)
+
+  productValues ProductCharacteristic[]
+
+  @@index([characteristicId])
+}
+
+// Связь товаров с характеристиками
+model ProductCharacteristic {
+  id                    String               @id @default(cuid())
+  productId             String
+  product               Product              @relation(fields: [productId], references: [id])
+  characteristicId      String
+  characteristic        Characteristic       @relation(fields: [characteristicId], references: [id])
+  value                 String? // Для text, number, boolean
+  characteristicValueId String? // Для select
+  characteristicValue   CharacteristicValue? @relation(fields: [characteristicValueId], references: [id])
+
+  @@unique([productId, characteristicId])
+  @@index([characteristicId])
+}
+
+// Автомобильный каталог
+model VehicleMake {
+  id      String  @id @default(cuid())
+  name    String
+  slug    String  @unique
+  country String?
+  logoUrl String?
+
+  // SEO поля
+  description     String?
+  metaTitle       String?
+  metaDescription String?
+  metaKeywords    String?
+
+  models VehicleModel[]
+
+  @@index([slug])
+}
+
+model VehicleModel {
+  id        String      @id @default(cuid())
+  makeId    String
+  make      VehicleMake @relation(fields: [makeId], references: [id])
+  name      String
+  slug      String      @unique
+  modelCode String?
+  startYear Int
+  endYear   Int?
+
+  // SEO поля
+  description     String?
+  metaTitle       String?
+  metaDescription String?
+  metaKeywords    String?
+
+  generations VehicleGeneration[]
+
+  @@index([makeId])
+  @@index([slug])
+}
+
+model VehicleGeneration {
+  id        String       @id @default(cuid())
+  modelId   String
+  model     VehicleModel @relation(fields: [modelId], references: [id])
+  name      String
+  slug      String       @unique
+  startYear Int
+  endYear   Int?
+  bodyType  String?
+
+  // SEO поля
+  description     String?
+  metaTitle       String?
+  metaDescription String?
+  metaKeywords    String?
+
+  modifications VehicleModification[]
+
+  @@index([modelId])
+  @@index([slug])
+}
+
+model VehicleModification {
+  id           String            @id @default(cuid())
+  generationId String
+  generation   VehicleGeneration @relation(fields: [generationId], references: [id])
+  name         String
+  engineCode   String?
+  fuelType     String?
+  powerHp      Int?
+  transmission String?
+
+  applications VehicleApplication[]
+
+  @@index([generationId])
+  @@index([name])
+}
+
+// Связь товаров с автомобилями
+model VehicleApplication {
+  id             String              @id @default(cuid())
+  productId      String
+  product        Product             @relation(fields: [productId], references: [id])
+  modificationId String
+  modification   VehicleModification @relation(fields: [modificationId], references: [id])
+  kTypeId        String? // Интеграция с TecDoc
+  notes          String?
+  isVerified     Boolean             @default(false)
+
+  @@unique([productId, modificationId])
+  @@index([productId])
+  @@index([modificationId])
+}
+
+// Кросс-номера
+model CrossReference {
+  id               String    @id @default(cuid())
+  productId        String
+  product          Product   @relation("ProductCrossReference", fields: [productId], references: [id])
+  crossPartNumber  String
+  crossBrandId     String
+  crossBrand       Brand     @relation(fields: [crossBrandId], references: [id])
+  crossType        CrossType
+  confidenceScore  Decimal   @default(0.5) @db.Decimal(3, 2)
+  verifiedByExpert Boolean   @default(false)
+
+  @@index([crossPartNumber, crossBrandId])
+  @@index([productId])
+}
+
+enum CrossType {
+  OEM
+  AFTERMARKET
+  UNIVERSAL
+}
+
+// Избранное
+model Favorite {
+  id            String         @id @default(cuid())
+  userId        String?
+  user          User?          @relation(fields: [userId], references: [id])
+  anonymousId   String?
+  anonymousUser AnonymousUser? @relation(fields: [anonymousId], references: [id])
+  productId     String
+  product       Product        @relation(fields: [productId], references: [id])
+  createdAt     DateTime       @default(now())
+
+  @@unique([userId, productId])
+  @@unique([anonymousId, productId])
+  @@index([userId])
+  @@index([anonymousId])
+}
+
+// История просмотров
+model ViewHistory {
+  id            String         @id @default(cuid())
+  userId        String?
+  user          User?          @relation(fields: [userId], references: [id])
+  anonymousId   String?
+  anonymousUser AnonymousUser? @relation(fields: [anonymousId], references: [id])
+  productId     String?
+  product       Product?       @relation(fields: [productId], references: [id])
+  categoryId    String?
+  category      Category?      @relation(fields: [categoryId], references: [id])
+  viewedAt      DateTime       @default(now())
+
+  @@index([userId, viewedAt])
+  @@index([anonymousId, viewedAt])
+}
+
+// Просмотры товаров для аналитики
+model ProductView {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  sessionId String?
+  source    String?  // search, category, direct, recommendation
+  referrer  String?
+  viewedAt  DateTime @default(now())
+  
+  @@index([productId, viewedAt])
+  @@index([userId])
+}
+
+// Корзина
+model Cart {
+  id            String         @id @default(cuid())
+  userId        String?
+  user          User?          @relation(fields: [userId], references: [id])
+  anonymousId   String?
+  anonymousUser AnonymousUser? @relation(fields: [anonymousId], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  items            CartItem[]
+  cartAbandonments CartAbandonment[]
+
+  @@index([userId])
+  @@index([anonymousId])
+}
+
+model CartItem {
+  id            String       @id @default(cuid())
+  cartId        String
+  cart          Cart         @relation(fields: [cartId], references: [id])
+  productId     String?
+  product       Product?     @relation(fields: [productId], references: [id])
+  chatProductId String?
+  chatProduct   ChatProduct? @relation(fields: [chatProductId], references: [id])
+  quantity      Int
+  price         Decimal      @db.Decimal(10, 2)
+  createdAt     DateTime     @default(now())
+
+  @@unique([cartId, productId, chatProductId])
+  @@index([cartId])
+}
+
+// Брошенные корзины
+model CartAbandonment {
+  id           String    @id @default(cuid())
+  cartId       String
+  cart         Cart      @relation(fields: [cartId], references: [id])
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id])
+  email        String?
+  phone        String?
+  totalValue   Decimal   @db.Decimal(10, 2)
+  itemsCount   Int
+  reminderSent Boolean   @default(false)
+  reminderSentAt DateTime?
+  recoveredAt  DateTime?
+  createdAt    DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Карточки товаров из чата
+model ChatProduct {
+  id           String   @id @default(cuid())
+  messageId    String
+  message      Message  @relation(fields: [messageId], references: [id])
+  name         String
+  brand        String
+  sku          String
+  price        Decimal  @db.Decimal(10, 2)
+  comparePrice Decimal? @db.Decimal(10, 2)
+  isOriginal   Boolean  @default(true)
+  deliveryDays Int?
+  description  String?
+  createdAt    DateTime @default(now())
+
+  images     ChatProductImage[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([messageId])
+}
+
+// Новая модель для изображений карточек товаров из чата
+model ChatProductImage {
+  id            String      @id @default(cuid())
+  chatProductId String
+  chatProduct   ChatProduct @relation(fields: [chatProductId], references: [id], onDelete: Cascade)
+  url           String
+  alt           String?
+  sortOrder     Int         @default(0)
+  createdAt     DateTime    @default(now())
+
+  @@index([chatProductId])
+}
+
+// Статусы чатов
+model ChatStatus {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  code      String   @unique
+  color     String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  chats Chat[]
+}
+
+// Чаты
+model Chat {
+  id            String         @id @default(cuid())
+  userId        String?
+  user          User?          @relation(fields: [userId], references: [id])
+  anonymousId   String?
+  anonymousUser AnonymousUser? @relation(fields: [anonymousId], references: [id])
+  managerId     String?
+  manager       User?          @relation("ManagerChats", fields: [managerId], references: [id])
+  statusId      String
+  status        ChatStatus     @relation(fields: [statusId], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  closedAt      DateTime?
+
+  messages Message[]
+
+  @@index([userId])
+  @@index([anonymousId])
+  @@index([managerId])
+  @@index([statusId])
+}
+
+// Сообщения чата
+model Message {
+  id          String      @id @default(cuid())
+  chatId      String
+  chat        Chat        @relation(fields: [chatId], references: [id])
+  senderId    String?
+  senderType  SenderType
+  messageType MessageType @default(TEXT)
+  content     String
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+
+  chatProducts ChatProduct[]
+
+  @@index([chatId, createdAt])
+}
+
+enum SenderType {
+  CUSTOMER
+  MANAGER
+  SYSTEM
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  PRODUCT_CARD
+  SYSTEM
+}
+
+// Статусы заказов
+model OrderStatus {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  code           String   @unique
+  color          String?
+  description    String?
+  isInitial      Boolean  @default(false)
+  isFinalSuccess Boolean  @default(false)
+  isFinalFailure Boolean  @default(false)
+  canCancelOrder Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  orders    Order[]
+  orderLogs OrderStatusLog[]
+}
+
+// Методы доставки
+model DeliveryMethod {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  price       Decimal  @default(0) @db.Decimal(10, 2)
+  minAmount   Decimal? @db.Decimal(10, 2)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  settings    Json?
+  createdAt   DateTime @default(now())
+
+  orders Order[]
+}
+
+// Методы оплаты
+model PaymentMethod {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  icon        String?
+  isOnline    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  settings    Json?
+  commission  Decimal  @default(0) @db.Decimal(5, 2)
+  createdAt   DateTime @default(now())
+
+  orders Order[]
+}
+
+// Заказы
+model Order {
+  id               String         @id @default(cuid())
+  orderNumber      String         @unique
+  invoiceNumber    String?        @unique
+  userId           String
+  user             User           @relation(fields: [userId], references: [id])
+  statusId         String
+  status           OrderStatus    @relation(fields: [statusId], references: [id])
+  subtotal         Decimal        @db.Decimal(10, 2)
+  discountAmount   Decimal        @default(0) @db.Decimal(10, 2)
+  shippingAmount   Decimal        @default(0) @db.Decimal(10, 2)
+  totalAmount      Decimal        @db.Decimal(10, 2)
+  deliveryMethodId String
+  deliveryMethod   DeliveryMethod @relation(fields: [deliveryMethodId], references: [id])
+  paymentMethodId  String
+  paymentMethod    PaymentMethod  @relation(fields: [paymentMethodId], references: [id])
+  shippingAddress  Json?
+  comment          String?
+  promoCodeId      String?
+  promoCode        PromoCode?     @relation(fields: [promoCodeId], references: [id])
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  items          OrderItem[]
+  statusLogs     OrderStatusLog[]
+  payments       Payment[]
+  promoCodeUsage PromoCodeUsage[]
+
+  @@index([userId])
+  @@index([statusId])
+  @@index([orderNumber])
+}
+
+// Элементы заказа
+model OrderItem {
+  id            String       @id @default(cuid())
+  orderId       String
+  order         Order        @relation(fields: [orderId], references: [id])
+  productId     String?
+  product       Product?     @relation(fields: [productId], references: [id])
+  chatProductId String?
+  chatProduct   ChatProduct? @relation(fields: [chatProductId], references: [id])
+  quantity      Int
+  price         Decimal      @db.Decimal(10, 2)
+  total         Decimal      @db.Decimal(10, 2)
+
+  @@index([orderId])
+}
+
+// История изменения статусов заказов
+model OrderStatusLog {
+  id          String      @id @default(cuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id])
+  statusId    String
+  status      OrderStatus @relation(fields: [statusId], references: [id])
+  comment     String?
+  createdById String
+  createdBy   User        @relation(fields: [createdById], references: [id])
+  createdAt   DateTime    @default(now())
+
+  @@index([orderId])
+}
+
+// Платежи
+model Payment {
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id])
+  amount        Decimal  @db.Decimal(10, 2)
+  status        String // pending, success, failed
+  transactionId String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([orderId])
+}
+
+// Система лояльности
+model CustomerGroup {
+  id              String   @id @default(cuid())
+  name            String
+  discountPercent Decimal  @default(0) @db.Decimal(5, 2)
+  minOrderAmount  Decimal? @db.Decimal(10, 2)
+  benefits        Json?
+
+  users         User[]
+  discountRules DiscountRule[]
+}
+
+model DiscountRule {
+  id              String         @id @default(cuid())
+  name            String
+  type            DiscountType
+  value           Decimal        @db.Decimal(10, 2)
+  minAmount       Decimal?       @db.Decimal(10, 2)
+  maxDiscount     Decimal?       @db.Decimal(10, 2)
+  startDate       DateTime?
+  endDate         DateTime?
+  usageLimit      Int?
+  customerGroupId String?
+  customerGroup   CustomerGroup? @relation(fields: [customerGroupId], references: [id])
+  categories      Json?
+  brands          Json?
+  isActive        Boolean        @default(true)
+
+  promoCodes PromoCode[]
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+  FREE_SHIPPING
+}
+
+model PromoCode {
+  id             String       @id @default(cuid())
+  code           String       @unique
+  discountRuleId String
+  discountRule   DiscountRule @relation(fields: [discountRuleId], references: [id])
+  usageCount     Int          @default(0)
+  usageLimit     Int?
+  personalUserId String?
+  personalUser   User?        @relation(fields: [personalUserId], references: [id])
+  expiresAt      DateTime?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  orders Order[]
+  usage  PromoCodeUsage[]
+
+  @@index([code])
+}
+
+// Использование промокодов
+model PromoCodeUsage {
+  id          String    @id @default(cuid())
+  promoCodeId String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  orderId     String?
+  order       Order?    @relation(fields: [orderId], references: [id])
+  createdAt   DateTime  @default(now())
+
+  @@unique([promoCodeId, userId, orderId])
+  @@index([promoCodeId])
+  @@index([userId])
+}
+
+// Задачи импорта/экспорта
+model ImportJob {
+  id            String    @id @default(cuid())
+  type          String    // products, categories, vehicles
+  fileName      String
+  fileUrl       String
+  status        String    // pending, processing, completed, failed
+  totalRows     Int?
+  processedRows Int       @default(0)
+  errorRows     Int       @default(0)
+  errorReport   Json?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+  
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+// SEO редиректы
+model Redirect {
+  id         String   @id @default(cuid())
+  fromPath   String   @unique
+  toPath     String
+  statusCode Int      @default(301)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  
+  @@index([fromPath])
+}
+
+// Популярные поисковые запросы
+model SearchQuery {
+  id         String   @id @default(cuid())
+  query      String
+  count      Int      @default(1)
+  lastUsedAt DateTime @default(now())
+  
+  @@unique([query])
+  @@index([count])
+}
+
+// История поиска пользователей
+model SearchHistory {
+  id            String         @id @default(cuid())
+  query         String
+  userId        String?
+  user          User?          @relation(fields: [userId], references: [id])
+  anonymousId   String?
+  anonymousUser AnonymousUser? @relation(fields: [anonymousId], references: [id])
+  resultsCount  Int?           // Количество найденных результатов
+  clickedProductId String?     // ID товара, на который кликнули из поиска
+  searchedAt    DateTime       @default(now())
+  
+  @@index([userId, searchedAt])
+  @@index([anonymousId, searchedAt])
+  @@index([query])
+}
+
+// Баннеры
+model Banner {
+  id        String    @id @default(cuid())
+  title     String
+  imageUrl  String
+  linkUrl   String?
+  position  String    // home_hero, home_sidebar, category_top
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime  @default(now())
+  
+  @@index([position, isActive])
+}
+
+// Шаблоны email
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  code      String   @unique // order_created, order_status_changed
+  name      String
+  subject   String
+  bodyHtml  String
+  bodyText  String?
+  variables Json?    // Доступные переменные
+  isActive  Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+  
+  @@index([code])
+}
+
+// Системные настройки
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  type      String   // string, number, boolean, json
+  group     String   // general, email, sms, payment
+  updatedAt DateTime @updatedAt
+  
+  @@index([group])
+}
+
+// Журнал аудита
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  action     String   // create, update, delete
+  entity     String   // product, order, user
+  entityId   String
+  changes    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  
+  @@index([userId, createdAt])
+  @@index([entity, entityId])
+}
+
+// Медиа файлы
+model Media {
+  id         String   @id @default(cuid())
+  filename   String
+  url        String
+  mimeType   String
+  size       Int      // в байтах
+  type       String   // image, document, archive
+  uploadedBy String?
+  createdAt  DateTime @default(now())
+  
+  @@index([type])
+}
