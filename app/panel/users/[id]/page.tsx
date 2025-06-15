@@ -1,11 +1,31 @@
 "use client"
 
 import { use } from "react"
-import { Container, Title, Paper, Stack, Group, Text, Badge, Table, Tabs, Card, Loader, Center } from "@mantine/core"
-import { IconShoppingCart, IconHeart, IconPackage, IconMessageCircle, IconLink } from "@tabler/icons-react"
+import {
+  Container,
+  Title,
+  Paper,
+  Stack,
+  Group,
+  Text,
+  Badge,
+  Table,
+  Tabs,
+  Card,
+  Loader,
+  Center,
+} from "@mantine/core"
+import {
+  IconShoppingCart,
+  IconHeart,
+  IconPackage,
+  IconMessageCircle,
+  IconLink,
+} from "@tabler/icons-react"
 import { useQuery } from "@tanstack/react-query"
 import { apiClient } from "@/shared/lib/api/client"
 import { formatPrice } from "@/shared/lib/format"
+import type { User } from "@/shared/types/user"
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -13,11 +33,15 @@ interface PageProps {
 
 export default function UserDetailPage({ params }: PageProps) {
   const { id } = use(params)
-  
-  const { data: user, isLoading, error } = useQuery({
+
+  const {
+    data: user,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["admin", "users", id],
     queryFn: () =>
-      apiClient.get(`/admin/users/${id}`).then(res => res.data.data),
+      apiClient.get<{ success: boolean; data: User }>(`/admin/users/${id}`).then((res) => res.data),
   })
 
   if (isLoading) {
@@ -34,7 +58,8 @@ export default function UserDetailPage({ params }: PageProps) {
         <Title>Пользователь не найден</Title>
         {error && (
           <Text color="red" mt="md">
-            Ошибка: {error instanceof Error ? error.message : 'Неизвестная ошибка'}
+            Ошибка:{" "}
+            {error instanceof Error ? error.message : "Неизвестная ошибка"}
           </Text>
         )}
       </Container>
@@ -43,9 +68,12 @@ export default function UserDetailPage({ params }: PageProps) {
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
-      case "ADMIN": return "red"
-      case "MANAGER": return "blue"
-      default: return "gray"
+      case "ADMIN":
+        return "red"
+      case "MANAGER":
+        return "blue"
+      default:
+        return "gray"
     }
   }
 
@@ -61,7 +89,9 @@ export default function UserDetailPage({ params }: PageProps) {
 
   return (
     <Container fluid>
-      <Title order={1} mb="xl">Информация о пользователе</Title>
+      <Title order={1} mb="xl">
+        Информация о пользователе
+      </Title>
 
       <Stack gap="xl">
         {/* Основная информация */}
@@ -69,58 +99,83 @@ export default function UserDetailPage({ params }: PageProps) {
           <Stack gap="md">
             <Group justify="space-between">
               <Title order={3}>Основная информация</Title>
-              <Badge color={getRoleBadgeColor(user.role)} variant="light" size="lg">
+              <Badge
+                color={getRoleBadgeColor(user.role)}
+                variant="light"
+                size="lg"
+              >
                 {user.role}
               </Badge>
             </Group>
-            
+
             <Group gap="xl" wrap="wrap">
               <Stack gap="xs">
-                <Text size="sm" c="dimmed">ID</Text>
+                <Text size="sm" c="dimmed">
+                  ID
+                </Text>
                 <Text fw={500}>{user.id}</Text>
               </Stack>
-              
+
               <Stack gap="xs">
-                <Text size="sm" c="dimmed">Имя</Text>
-                <Text fw={500}>{user.firstName} {user.lastName}</Text>
+                <Text size="sm" c="dimmed">
+                  Имя
+                </Text>
+                <Text fw={500}>
+                  {user.firstName} {user.lastName}
+                </Text>
               </Stack>
-              
+
               <Stack gap="xs">
-                <Text size="sm" c="dimmed">Телефон</Text>
+                <Text size="sm" c="dimmed">
+                  Телефон
+                </Text>
                 <Group gap="xs">
                   <Text fw={500}>{user.phone}</Text>
                   {user.phoneVerified && (
-                    <Badge color="green" variant="light" size="sm">Подтвержден</Badge>
+                    <Badge color="green" variant="light" size="sm">
+                      Подтвержден
+                    </Badge>
                   )}
                 </Group>
               </Stack>
-              
+
               <Stack gap="xs">
-                <Text size="sm" c="dimmed">Email</Text>
+                <Text size="sm" c="dimmed">
+                  Email
+                </Text>
                 <Group gap="xs">
                   <Text fw={500}>{user.email || "Не указан"}</Text>
                   {user.emailVerified && (
-                    <Badge color="green" variant="light" size="sm">Подтвержден</Badge>
+                    <Badge color="green" variant="light" size="sm">
+                      Подтвержден
+                    </Badge>
                   )}
                 </Group>
               </Stack>
-              
+
               <Stack gap="xs">
-                <Text size="sm" c="dimmed">Дата регистрации</Text>
+                <Text size="sm" c="dimmed">
+                  Дата регистрации
+                </Text>
                 <Text fw={500}>{formatDate(user.createdAt)}</Text>
               </Stack>
-              
+
               <Stack gap="xs">
-                <Text size="sm" c="dimmed">Последняя активность</Text>
+                <Text size="sm" c="dimmed">
+                  Последняя активность
+                </Text>
                 <Text fw={500}>{formatDate(user.lastActivityAt)}</Text>
               </Stack>
             </Group>
 
             {user.customerGroup && (
               <Group gap="xs">
-                <Text size="sm" c="dimmed">Группа покупателя:</Text>
+                <Text size="sm" c="dimmed">
+                  Группа покупателя:
+                </Text>
                 <Badge color="grape" variant="light">
-                  {user.customerGroup.name} (-{user.customerGroup.discountPercent}%)
+                  {user.customerGroup.name} (-
+                  {user.customerGroup.discountPercent}%)
                 </Badge>
               </Group>
             )}
@@ -129,38 +184,56 @@ export default function UserDetailPage({ params }: PageProps) {
 
         {/* Статистика */}
         <Paper p="md" withBorder>
-          <Title order={3} mb="md">Статистика</Title>
+          <Title order={3} mb="md">
+            Статистика
+          </Title>
           <Group gap="xl">
             <Card p="md" withBorder>
               <Group gap="xs">
                 <IconPackage size={20} />
-                <Text size="sm" c="dimmed">Заказов</Text>
+                <Text size="sm" c="dimmed">
+                  Заказов
+                </Text>
               </Group>
-              <Text size="xl" fw={700}>{user._count.orders}</Text>
+              <Text size="xl" fw={700}>
+                {user._count.orders}
+              </Text>
             </Card>
-            
+
             <Card p="md" withBorder>
               <Group gap="xs">
                 <IconShoppingCart size={20} />
-                <Text size="sm" c="dimmed">Товаров в корзине</Text>
+                <Text size="sm" c="dimmed">
+                  Товаров в корзине
+                </Text>
               </Group>
-              <Text size="xl" fw={700}>{user.carts?.[0]?.items?.length || 0}</Text>
+              <Text size="xl" fw={700}>
+                {user.carts?.[0]?.items?.length || 0}
+              </Text>
             </Card>
-            
+
             <Card p="md" withBorder>
               <Group gap="xs">
                 <IconHeart size={20} />
-                <Text size="sm" c="dimmed">В избранном</Text>
+                <Text size="sm" c="dimmed">
+                  В избранном
+                </Text>
               </Group>
-              <Text size="xl" fw={700}>{user._count.favorites}</Text>
+              <Text size="xl" fw={700}>
+                {user._count.favorites}
+              </Text>
             </Card>
-            
+
             <Card p="md" withBorder>
               <Group gap="xs">
                 <IconMessageCircle size={20} />
-                <Text size="sm" c="dimmed">Чатов</Text>
+                <Text size="sm" c="dimmed">
+                  Чатов
+                </Text>
               </Group>
-              <Text size="xl" fw={700}>{user._count.chats}</Text>
+              <Text size="xl" fw={700}>
+                {user._count.chats}
+              </Text>
             </Card>
           </Group>
         </Paper>
@@ -211,7 +284,9 @@ export default function UserDetailPage({ params }: PageProps) {
                 </Table.Tbody>
               </Table>
             ) : (
-              <Text c="dimmed" ta="center">Заказов пока нет</Text>
+              <Text c="dimmed" ta="center">
+                Заказов пока нет
+              </Text>
             )}
           </Tabs.Panel>
 
@@ -229,8 +304,10 @@ export default function UserDetailPage({ params }: PageProps) {
                 <Table.Tbody>
                   {user.carts[0].items.map((item: any) => (
                     <Table.Tr key={item.id}>
-                      <Table.Td>{item.product?.name || 'Товар из чата'}</Table.Td>
-                      <Table.Td>{item.product?.sku || '-'}</Table.Td>
+                      <Table.Td>
+                        {item.product?.name || "Товар из чата"}
+                      </Table.Td>
+                      <Table.Td>{item.product?.sku || "-"}</Table.Td>
                       <Table.Td>{item.quantity}</Table.Td>
                       <Table.Td>{formatPrice(item.price)}</Table.Td>
                     </Table.Tr>
@@ -238,7 +315,9 @@ export default function UserDetailPage({ params }: PageProps) {
                 </Table.Tbody>
               </Table>
             ) : (
-              <Text c="dimmed" ta="center">Корзина пуста</Text>
+              <Text c="dimmed" ta="center">
+                Корзина пуста
+              </Text>
             )}
           </Tabs.Panel>
 
@@ -265,7 +344,9 @@ export default function UserDetailPage({ params }: PageProps) {
                 </Table.Tbody>
               </Table>
             ) : (
-              <Text c="dimmed" ta="center">Нет товаров в избранном</Text>
+              <Text c="dimmed" ta="center">
+                Нет товаров в избранном
+              </Text>
             )}
           </Tabs.Panel>
 
@@ -292,7 +373,9 @@ export default function UserDetailPage({ params }: PageProps) {
                 </Table.Tbody>
               </Table>
             ) : (
-              <Text c="dimmed" ta="center">Нет связанных анонимных сессий</Text>
+              <Text c="dimmed" ta="center">
+                Нет связанных анонимных сессий
+              </Text>
             )}
           </Tabs.Panel>
         </Tabs>

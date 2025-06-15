@@ -8,13 +8,13 @@ import { apiClient } from "@/shared/lib/api/client"
 import { notifications } from "@mantine/notifications"
 import { useRouter } from "next/navigation"
 
-interface User {
+interface UserListItem {
   id: string
   phone: string
-  email?: string
-  firstName?: string
-  lastName?: string
-  role: string
+  email?: string | null
+  firstName?: string | null
+  lastName?: string | null
+  role: 'CUSTOMER' | 'MANAGER' | 'ADMIN'
   phoneVerified: boolean
   createdAt: string
   lastActivityAt: string
@@ -29,7 +29,7 @@ export function UserManagementWidget() {
   const { data: users, isLoading } = useQuery({
     queryKey: ["admin", "users", { search, role: roleFilter }],
     queryFn: () =>
-      apiClient.get<{ data: User[] }>("/admin/users", {
+      apiClient.get<{ success: boolean; data: UserListItem[] }>("/admin/users", {
         params: { 
           search, 
           ...(roleFilter && { role: roleFilter })
