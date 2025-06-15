@@ -14,7 +14,7 @@ interface PageProps {
 export default function UserDetailPage({ params }: PageProps) {
   const { id } = use(params)
   
-  const { data: user, isLoading } = useQuery({
+  const { data: user, isLoading, error } = useQuery({
     queryKey: ["admin", "users", id],
     queryFn: () =>
       apiClient.get(`/admin/users/${id}`).then(res => res.data.data),
@@ -32,6 +32,11 @@ export default function UserDetailPage({ params }: PageProps) {
     return (
       <Container>
         <Title>Пользователь не найден</Title>
+        {error && (
+          <Text color="red" mt="md">
+            Ошибка: {error instanceof Error ? error.message : 'Неизвестная ошибка'}
+          </Text>
+        )}
       </Container>
     )
   }
