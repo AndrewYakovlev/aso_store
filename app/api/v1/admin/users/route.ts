@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       ]
     }
     
-    if (role) {
+    if (role && role !== 'null') {
       where.role = role
     }
 

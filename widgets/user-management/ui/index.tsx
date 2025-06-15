@@ -30,7 +30,10 @@ export function UserManagementWidget() {
     queryKey: ["admin", "users", { search, role: roleFilter }],
     queryFn: () =>
       apiClient.get<{ data: User[] }>("/admin/users", {
-        params: { search, role: roleFilter },
+        params: { 
+          search, 
+          ...(roleFilter && { role: roleFilter })
+        },
       }).then(res => res.data),
   })
 
