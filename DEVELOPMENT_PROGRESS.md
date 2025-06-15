@@ -151,21 +151,28 @@
 ### Этап 2: Каталог товаров - базовый функционал (10 дней)
 
 #### 2.1 Backend: Products & Categories API
-**Статус**: ⏳ Ожидает
-- [ ] Создать Prisma модели: Category, Product, Brand, ProductImage
-- [ ] Реализовать Categories API:
-  - [ ] GET /api/v1/categories
-  - [ ] POST /api/v1/categories
-  - [ ] PATCH /api/v1/categories/[id]
-  - [ ] DELETE /api/v1/categories/[id]
-- [ ] Реализовать Products API:
-  - [ ] GET /api/v1/products
-  - [ ] GET /api/v1/products/[id]
-  - [ ] POST /api/v1/products
-  - [ ] PATCH /api/v1/products/[id]
-  - [ ] DELETE /api/v1/products/[id]
-- [ ] Добавить поиск и фильтрацию
-- [ ] Реализовать пагинацию
+**Статус**: ✅ Выполнено
+- [x] Создать Prisma модели: Category, Product, Brand, ProductImage
+- [x] Реализовать Categories API:
+  - [x] GET /api/v1/categories
+  - [x] POST /api/v1/categories
+  - [x] PATCH /api/v1/categories/[id]
+  - [x] DELETE /api/v1/categories/[id]
+  - [x] GET /api/v1/categories/tree
+  - [x] PUT /api/v1/categories/reorder
+- [x] Реализовать Products API:
+  - [x] GET /api/v1/products
+  - [x] GET /api/v1/products/[id]
+  - [x] POST /api/v1/products
+  - [x] PATCH /api/v1/products/[id]
+  - [x] DELETE /api/v1/products/[id]
+  - [x] GET /api/v1/products/search
+  - [x] GET /api/v1/products/[id]/related
+- [x] Реализовать Brands API:
+  - [x] GET /api/v1/brands
+  - [x] POST /api/v1/brands
+- [x] Добавить поиск и фильтрацию
+- [x] Реализовать пагинацию
 
 #### 2.2 Frontend: Управление категориями
 **Статус**: ⏳ Ожидает
