@@ -217,11 +217,15 @@ async function main() {
   ]
 
   for (const group of customerGroups) {
-    await prisma.customerGroup.upsert({
+    const existingGroup = await prisma.customerGroup.findFirst({
       where: { name: group.name },
-      update: {},
-      create: group,
     })
+    
+    if (!existingGroup) {
+      await prisma.customerGroup.create({
+        data: group,
+      })
+    }
   }
 
   // Создаем бренды
